@@ -1,7 +1,8 @@
-from datetime import datetime
+from datetime import datetime, date
 from enum import IntEnum, StrEnum
+from typing import Annotated
 
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel, HttpUrl, Field
 
 
 class NotionGameProp(StrEnum):
@@ -63,13 +64,29 @@ class ReleaseRegion(IntEnum):
     worldwide = 8
 
 
+class ReleaseDateStatusType(StrEnum):
+    offline = "Offline"
+    full_release = "Full Release"
+    beta = "Beta"
+    alpha = "Alpha"
+    early_access = "Early Access"
+    cancelled = "Cancelled"
+
+
+class ReleaseDateStatus(BaseModel):
+    id: int
+    name: ReleaseDateStatusType | str
+
+
 class ReleaseDate(BaseModel):
     category: ReleaseCategory | int
-    date: datetime | None = None
+    date_: Annotated[date | None, Field(alias="date")] = None
     human: str | None = None
     y: int | None = None
     m: int | None = None
     region: ReleaseRegion | int
+    status: ReleaseDateStatus | None = None
+    platform: Platform | None = None
 
 
 class GameCategory(IntEnum):

@@ -6,10 +6,15 @@ from notion_client import Client
 
 from notion_games import config
 from notion_games.external.igdb_client import IGDB
-from notion_games.schemas import Game, NotionGameProp, ReleaseRegion, WebsiteCategory
+from notion_games.schemas import Game, NotionGameProp, ReleaseDateStatusType, ReleaseRegion, WebsiteCategory
 
 notion = Client(auth=config.NOTION_TOKEN)
 igdb_client = IGDB(config.IGDB_CLIENT_ID, config.IGDB_CLIENT_SECRET)
+
+_RELEASE_DATE_STATUS_MAPPING = {
+    ReleaseDateStatusType.full_release: 1,
+    ReleaseDateStatusType.early_access: 2,
+}
 
 
 def _get_game(page: dict[str, Any]) -> tuple[Game | None, dict[str, Any]]:
@@ -36,7 +41,8 @@ def _get_game(page: dict[str, Any]) -> tuple[Game | None, dict[str, Any]]:
             "games",
             (
                 f"fields name,url,aggregated_rating,category,first_release_date,"
-                f"platforms.*,cover.*,genres.*,websites.*,release_dates.*,"
+                f"platforms.*,cover.*,genres.*,websites.*,"
+                f"release_dates.*,release_dates.status.*,release_dates.platform.*,"
                 f"parent_game.id,parent_game.name,url,updated_at; "
                 f"where id = {igdb_id};"
             ),
@@ -52,7 +58,8 @@ def _get_game(page: dict[str, Any]) -> tuple[Game | None, dict[str, Any]]:
             "search",
             (
                 f"fields game.name,game.url,game.aggregated_rating,game.category,game.first_release_date,"
-                f"game.platforms.*,game.cover.*,game.genres.*,game.websites.*,game.release_dates.*,"
+                f"game.platforms.*,game.cover.*,game.genres.*,game.websites.*,"
+                f"game.release_dates.*,game.release_dates.status.*,game.release_dates.platform.*,"
                 f"game.url,game.updated_at; "
                 f'search "{page_title}"; '
                 f"where game != null & game.category != (13) & game.version_parent = null;"
@@ -111,6 +118,9 @@ def _update_page(page_id: str) -> None:
     if game.platforms:
         platforms = []
         for platform in game.platforms:
+            if platform.abbreviation in ["Stadia"]:
+                continue
+
             logger.debug(f"Platform: {platform.abbreviation}")
             platforms.append({"name": platform.abbreviation})
 
@@ -148,16 +158,22 @@ def _update_page(page_id: str) -> None:
             }
 
     if game.release_dates:
-        filtered_release_dates = [
-            release
-            for release in game.release_dates
-            if release.region in [ReleaseRegion.worldwide, ReleaseRegion.north_america]
-        ]
-        dates_mapping: list[tuple[pendulum.DateTime, str]] = []
-        for release in filtered_release_dates:
+        dates_mapping: list[tuple[int, pendulum.Date, str]] = []
+        for release in game.release_dates:
+            if (
+                release.region not in [ReleaseRegion.worldwide, ReleaseRegion.north_america]
+                or (
+                    release.status is not None
+                    and release.status.name
+                    not in [ReleaseDateStatusType.full_release, ReleaseDateStatusType.early_access]
+                )
+                or (release.platform is not None and release.platform.abbreviation in ["Stadia"])
+            ):
+                continue
+
             if 0 <= release.category <= 6:
                 if release.category == 0:
-                    release_date = pendulum.instance(release.date)
+                    release_date = pendulum.instance(release.date_)
                 elif release.category == 1:
                     release_date = pendulum.date(release.y, release.m, 1).end_of("month")
                 elif release.category == 2:
@@ -171,21 +187,22 @@ def _update_page(page_id: str) -> None:
                 else:
                     release_date = pendulum.date(release.y, 12, 1).end_of("month")
 
-                dates_mapping.append((release_date, release.human))
-                break
+                release_status = _RELEASE_DATE_STATUS_MAPPING.get(release.status.name, 0) if release.status else 0
+
+                dates_mapping.append((release_status, release_date, release.human))
 
         if dates_mapping:
-            date = sorted(dates_mapping, key=lambda x: x[0])[0]
-            logger.debug(f"Release date: {date[0].format('MMMM D, YYYY')}")
+            date = sorted(dates_mapping, key=lambda x: (x[0], x[1]))[0]
+            logger.debug(f"Release date: {date[1].format('MMMM D, YYYY')}")
             properties[NotionGameProp.RELEASE_DATE] = {
                 "type": "date",
                 "date": {
-                    "start": date[0].format("YYYY-MM-DD"),
+                    "start": date[1].format("YYYY-MM-DD"),
                 },
             }
             properties[NotionGameProp.RELEASE_DATE_HUMAN] = {
                 "type": "rich_text",
-                "rich_text": [{"text": {"content": date[1]}}],
+                "rich_text": [{"text": {"content": date[2]}}],
             }
         else:
             logger.debug("No release date found")
