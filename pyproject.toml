@@ -1,0 +1,51 @@
+[tool.poetry]
+name = "notion-games"
+version = "0.1.0"
+description = ""
+authors = ["MarcDufresne <marc-andre.dufresne@novisto.com>"]
+readme = "README.md"
+packages = [
+    { include = "notion_games" }
+]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+python-dotenv = "^1.0.1"
+igdb-api-v4 = "^0.3.2"
+notion-client = "^2.2.1"
+httpx = {version = "^0.27.0", extras = ["http2"]}
+pyyaml = "^6.0.1"
+pydantic = "^2.7.1"
+typer = "^0.12.3"
+loguru = "^0.7.2"
+pendulum = "^3.0.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.4.4"
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "F",
+    "E",
+    "T20",
+    "I",
+    "T10"
+]
+ignore = []
+unfixable = ["F841"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["N802", "N803", "E203"]
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "double"
+line-ending = "lf"
+skip-magic-trailing-comma = false
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
