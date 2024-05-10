@@ -147,20 +147,7 @@ def _update_page(page_id: str) -> None:
                 "url": url,
             }
 
-    if game.first_release_date:
-        from_timestamp = pendulum.from_timestamp(game.first_release_date)
-        logger.debug(f"Release date: {from_timestamp.format('MMMM D, YYYY')}")
-        properties[NotionGameProp.RELEASE_DATE] = {
-            "type": "date",
-            "date": {
-                "start": from_timestamp.format("YYYY-MM-DD"),
-            },
-        }
-        properties[NotionGameProp.RELEASE_DATE_HUMAN] = {
-            "type": "rich_text",
-            "rich_text": [{"text": {"content": from_timestamp.format("MMMM D, YYYY")}}],
-        }
-    elif game.release_dates:
+    if game.release_dates:
         filtered_release_dates = [
             release
             for release in game.release_dates
