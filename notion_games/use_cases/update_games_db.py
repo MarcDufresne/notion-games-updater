@@ -99,8 +99,10 @@ def _update_page(page_id: str) -> None:
     logger.info(f"Game: {page_title}")
 
     game, properties = _get_game(page)
+    if game is None:
+        logger.warning(f"Game not found for page '{page_title}'")
+        return
 
-    # TODO: Set attributes on the game in Notion (release date, platforms, cover image)
     properties.update(
         {
             NotionGameProp.IGDB_ID: {
