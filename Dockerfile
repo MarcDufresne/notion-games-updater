@@ -1,19 +1,30 @@
-FROM python:3.11-slim
-
-RUN apt update \
-    && apt install -y build-essential \
-    && apt clean
+# Build stage
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
-ADD pyproject.toml ./
-ADD poetry.lock ./
-ADD notion_games/__init__.py ./notion_games/__init__.py
 
-RUN pip install --no-cache-dir -U pip poetry \
-    && poetry config virtualenvs.in-project true \
-    && poetry install --no-dev
+# Copy go mod files
+COPY go.mod go.sum ./
 
-ADD notion_games ./notion_games
-ADD run.py ./
+# Download dependencies
+RUN go mod download
 
-ENTRYPOINT ["poetry", "run", "python", "run.py"]
+# Copy source code
+COPY cmd/ cmd/
+COPY internal/ internal/
+
+# Build the application
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o updater ./cmd/updater
+
+# Runtime stage
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates tzdata
+
+WORKDIR /root/
+
+# Copy the binary from builder
+COPY --from=builder /app/updater .
+
+# Run the updater with run-forever flag by default
+CMD ["./updater", "-run-forever", "-interval", "15"]

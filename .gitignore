@@ -107,3 +107,15 @@ dmypy.json
 cython_debug/
 .idea/
 *.iml
+updater
+*.exe
+*.dll
+*.dylib
+*.test
+*.out
+vendor/
+go.work
+.vscode/
+*.swp
+*.swo
+Thumbs.db
