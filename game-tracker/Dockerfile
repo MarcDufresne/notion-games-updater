@@ -34,11 +34,12 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Copy built frontend from stage 1
-COPY --from=frontend-builder /app/frontend/dist ./frontend/dist
+# Copy built frontend from stage 1 into cmd/server directory
+RUN mkdir -p ./cmd/server/frontend
+COPY --from=frontend-builder /app/frontend/dist ./cmd/server/frontend/dist
 
-# Build the server
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o server ./cmd/server
+# Build the server (without dev tag to enable embedding)
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o server ./cmd/server
 
 # Stage 3: Run
 FROM alpine:latest
