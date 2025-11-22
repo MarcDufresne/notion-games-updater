@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strconv"
 	"time"
 
 	"game-tracker/internal/database"
@@ -146,8 +145,8 @@ func (bs *BackgroundSync) updateGamesWithIGDBID(ctx context.Context) error {
 			for _, genre := range igdbGame.Genres {
 				genres = append(genres, genre.Name)
 			}
-			// Simple comparison - update if different
-			if fmt.Sprintf("%v", game.Genres) != fmt.Sprintf("%v", genres) {
+			// Check if genres are different
+			if !equalStringSlices(game.Genres, genres) {
 				game.Genres = genres
 				updated = true
 			}
@@ -158,8 +157,8 @@ func (bs *BackgroundSync) updateGamesWithIGDBID(ctx context.Context) error {
 			for _, platform := range igdbGame.Platforms {
 				platforms = append(platforms, platform.Name)
 			}
-			// Simple comparison - update if different
-			if fmt.Sprintf("%v", game.Platforms) != fmt.Sprintf("%v", platforms) {
+			// Check if platforms are different
+			if !equalStringSlices(game.Platforms, platforms) {
 				game.Platforms = platforms
 				updated = true
 			}
@@ -232,8 +231,15 @@ func (bs *BackgroundSync) RunOnce(ctx context.Context) error {
 	return nil
 }
 
-// Helper function to convert int to string pointer
-func intToStringPtr(i int) *string {
-	s := strconv.Itoa(i)
-	return &s
+// equalStringSlices compares two string slices for equality
+func equalStringSlices(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }

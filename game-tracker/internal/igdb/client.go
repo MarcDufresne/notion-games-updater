@@ -166,7 +166,6 @@ func (c *Client) ListAll(endpoint, query string) ([]byte, error) {
 
 	for offset < total {
 		newQuery := fmt.Sprintf("%s offset %d;", query, offset)
-		fmt.Println(newQuery)
 
 		resp, err := c.request(endpoint, newQuery)
 		if err != nil {
