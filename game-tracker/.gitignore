@@ -1,0 +1,13 @@
+# Binaries
+/game-tracker
+
+# Go
+.env
+.DS_Store
+
+# Frontend
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/.DS_Store
+frontend/*.log
