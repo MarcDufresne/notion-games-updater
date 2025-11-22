@@ -119,3 +119,11 @@ go.work
 *.swp
 *.swo
 Thumbs.db
+
+# Game Tracker Application
+game-tracker/frontend/node_modules/
+game-tracker/frontend/dist/
+game-tracker/cmd/server/server
+game-tracker/cmd/migrate/migrate
+game-tracker/server
+game-tracker/migrate
