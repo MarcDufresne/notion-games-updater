@@ -1,0 +1,42 @@
+# Binaries
+*.log
+# Logs
+
+Thumbs.db
+.DS_Store
+# OS
+
+.env.*.local
+.env.local
+# Environment
+
+*~
+*.swo
+*.swp
+.vscode/
+.idea/
+# IDE
+
+frontend/node_modules/
+frontend/dist/
+# Build output
+
+vendor/
+node_modules/
+# Dependency directories
+
+*.out
+# Output of the go coverage tool
+
+*.test
+# Test binary, built with `go test -c`
+
+*.dylib
+*.so
+*.dll
+*.exe~
+*.exe
+migrate
+server
+
+!frontend/src/lib
