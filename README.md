@@ -1,183 +1,327 @@
-# Notion Games Library Updater
-
-Update your Notion DB Game entries with the latest information from the IGDB API.
-
-## Features
-
-- Fetches game data from IGDB API
-- Updates Notion database with:
-  - Game ratings
-  - Release dates
-  - Platforms
-  - Genres
-  - Store URLs (Steam, GOG, Itch.io, Epic Games)
-  - Cover images
-- Automatic token management for IGDB API
-- Rate limiting and retry logic
-- Can run as a one-time update or continuously with configurable intervals
-- Dry-run mode for testing without updating Notion
-
-## Project Structure
-
+# Game Tracker
+A self-hosted game library manager with Go backend, Vue 3 frontend, and Firebase integration. Track your game backlog, manage your playing status, and browse upcoming releases with automatic metadata enrichment from IGDB.
+## ✨ Features
+### Core Functionality
+- 🎮 **Game Management**: Track games across 6 statuses (Backlog, Break, Playing, Done, Abandoned, Won't Play)
+- 🔍 **IGDB Integration**: Search and add games with automatic metadata (cover art, genres, platforms, release dates)
+- 📅 **Multiple Views**:
+  - **Backlog**: Organized by "Break" and "Up Next" sections
+  - **Playing**: Currently active games
+  - **History**: Completed games grouped by year played
+  - **Calendar**: Upcoming releases by month/year
+  - **All**: Complete library sorted by release date
+- 🔄 **Background Sync**: 1-hour automatic metadata updates for matched games
+- 🎯 **Smart Matching**: Automatic and manual game matching with IGDB
+- 📊 **Platform Colors**: Color-coded platform badges (PC, Xbox, PlayStation, Nintendo)
+- 📱 **Date Tracking**: Record when you completed games
+### PWA Support
+- 📲 **Installable**: Install as a native app on Android, iOS, and Desktop
+- 🚀 **Offline Ready**: Service worker with smart caching
+- 🎨 **Dark Theme**: Elegant dark UI optimized for mobile and desktop
+- 📱 **Responsive**: Fully responsive layout with mobile-optimized navigation
+### Technical Features
+- 🔐 **Firebase Authentication**: Google Sign-In only
+- 🗄️ **Firestore Database**: Real-time NoSQL database
+- 💾 **Sturdyc Cache**: High-performance in-memory caching for IGDB searches
+- 🚀 **Single Binary**: Frontend embedded in Go binary for easy deployment
+- 🐳 **Docker Ready**: Multi-stage build for optimized containers
+## 🛠️ Tech Stack
+- **Backend**: Go 1.25+, Firebase Admin SDK, Sturdyc
+- **Frontend**: Vue 3 (Composition API + Script Setup), Pinia, TailwindCSS, VueUse
+- **Database**: Firebase Firestore
+- **Auth**: Firebase Authentication
+- **External API**: IGDB for game metadata
+- **Cache**: Sturdyc in-memory cache
+- **PWA**: Service Worker, Web App Manifest
+## 📋 Prerequisites
+- Go 1.25 or higher
+- Node.js 20 or higher
+- Firebase project with Firestore and Authentication enabled
+- IGDB API credentials (free tier available)
+## 🚀 Quick Start
+### 1. Configure Environment Variables
+Create `.env` file in the project root:
+```env
+# Firebase Configuration
+FIREBASE_PROJECT_ID=your-project-id
+FIREBASE_SERVICE_ACCOUNT_JSON=./firebase_key.json
+# OR use raw JSON:
+# FIREBASE_SERVICE_ACCOUNT_KEY={"type":"service_account",...}
+# IGDB Configuration
+IGDB_CLIENT_ID=your-client-id
+IGDB_CLIENT_SECRET=your-client-secret
+# Server Configuration (optional)
+PORT=8080
+HOST=0.0.0.0
 ```
-.
+Create `frontend/.env` file:
+```env
+VITE_FIREBASE_API_KEY=your-api-key
+VITE_FIREBASE_AUTH_DOMAIN=your-auth-domain
+VITE_FIREBASE_PROJECT_ID=your-project-id
+VITE_FIREBASE_STORAGE_BUCKET=your-storage-bucket
+VITE_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+VITE_FIREBASE_APP_ID=your-app-id
+VITE_API_URL=http://localhost:8080
+```
+### 2. Install Dependencies
+```bash
+make install
+```
+### 3. Development
+Use the Makefile for easy development:
+```bash
+# Setup development environment (run once)
+make dev-setup
+# Terminal 1: Run backend server
+make dev-backend
+# Terminal 2: Run frontend dev server with hot reload
+make dev-frontend
+```
+Or use the convenience command that shows instructions:
+```bash
+make dev
+```
+**Development URLs:**
+- Backend API: `http://localhost:8080`
+- Frontend Dev Server: `http://localhost:5173` (with hot reload)
+### 4. Production Build
+Build everything with one command:
+```bash
+make build
+# Run the server
+./server
+```
+The Makefile handles:
+- Building the frontend
+- Copying frontend into `cmd/server/frontend/` for embedding
+- Building the Go binary with embedded frontend
+- Cleaning up temporary files
+## 🐳 Docker Deployment
+Build and run with Docker:
+```bash
+# Build image
+make docker-build
+# Run container (requires .env.docker and firebase_key.json)
+make docker-run
+```
+Or manually:
+```bash
+docker build -t game-tracker .
+docker run -p 8080:8080 \
+  --env-file .env.docker \
+  -v ./firebase_key.json:/firebase_key.json \
+  game-tracker
+```
+**Docker Build Details:**
+- Multi-stage build (Node → Go → Alpine)
+- Frontend built and embedded in Go binary
+- Final image based on Alpine Linux (~50MB)
+- Includes ca-certificates and tzdata
+## 🔌 API Endpoints
+All API endpoints require Firebase ID token in `Authorization: Bearer <token>` header.
+### Game Management
+- `GET /api/v1/games?view={backlog|playing|history|calendar|all}` - Get games by view
+  - `backlog`: Games with status "Backlog" or "Break", sorted by release date
+  - `playing`: Games with status "Playing", sorted by updated date
+  - `history`: Games with status "Done", "Abandoned", or "Won't Play", sorted by played date
+  - `calendar`: Upcoming games (released in last month or future), sorted by release date
+  - `all`: All games sorted by release date descending
+- `POST /api/v1/games` - Create new game (auto-fetches metadata if IGDB ID provided)
+- `POST /api/v1/games/{id}/status` - Update game status
+- `PUT /api/v1/games/{id}/played-date` - Update played date
+- `DELETE /api/v1/games/{id}` - Delete game
+- `PUT /api/v1/games/{id}/match` - Match game to IGDB entry
+### Search & Metadata
+- `GET /api/v1/search?q={query}` - Search IGDB (cached with Sturdyc, 1-hour TTL)
+- `GET /api/v1/games/unmatched` - Get games needing manual matching
+### Health Check
+- `GET /health` - Health check (no auth required)
+## 📁 Project Structure
+```
+notion-games-updater/
 ├── cmd/
-│   └── updater/
-│       └── main.go              # CLI entry point
+│   ├── server/
+│   │   └── main.go              # Main server entry point (embeds frontend)
+│   └── migrate/
+│       └── main.go              # Notion to Firestore migration tool
 ├── internal/
+│   ├── api/
+│   │   └── handler.go           # REST API handlers & routes
+│   ├── cache/
+│   │   └── lru.go               # Sturdyc-based cache wrapper
 │   ├── config/
-│   │   └── config.go            # Configuration loading
-│   ├── domain/
-│   │   ├── game.go              # Domain models
-│   │   └── enums.go             # Enums and constants
+│   │   └── config.go            # Environment variable configuration
+│   ├── database/
+│   │   └── firestore.go         # Firestore client & queries
 │   ├── igdb/
 │   │   └── client.go            # IGDB API client
-│   ├── notion/
-│   │   └── mapper.go            # IGDB to Notion mapping
-│   └── usecase/
-│       └── update_games.go      # Business logic
+│   ├── legacy_domain/           # For Notion migration
+│   │   ├── enums.go
+│   │   └── game.go
+│   ├── middleware/
+│   │   ├── auth.go              # Firebase auth verification
+│   │   └── cors.go              # CORS middleware
+│   ├── model/
+│   │   └── game.go              # Game domain model
+│   └── worker/
+│       └── sync.go              # Background metadata sync (15min)
+├── frontend/
+│   ├── public/
+│   │   ├── icon.png             # PWA icon (512x512)
+│   │   ├── icon.svg             # Vector icon
+│   │   ├── manifest.json        # PWA manifest
+│   │   └── service-worker.js   # Service worker for offline
+│   ├── src/
+│   │   ├── components/
+│   │   │   ├── FixMatchModal.vue      # Manual IGDB matching
+│   │   │   ├── GameCard.vue           # Game card component
+│   │   │   ├── GameDetailsModal.vue   # Game details popup
+│   │   │   ├── GameSearch.vue         # Search & add games
+│   │   │   ├── StatusPicker.vue       # Status dropdown
+│   │   │   └── Toast.vue              # Toast notifications
+│   │   ├── views/
+│   │   │   ├── AllView.vue            # All games view
+│   │   │   ├── BacklogView.vue        # Backlog (Break + Up Next)
+│   │   │   ├── CalendarView.vue       # Upcoming releases
+│   │   │   ├── HistoryView.vue        # Completed games
+│   │   │   └── PlayingView.vue        # Currently playing
+│   │   ├── stores/
+│   │   │   └── games.js               # Pinia store
+│   │   ├── lib/
+│   │   │   ├── api.js                 # API client
+│   │   │   ├── dateUtils.js           # Date utilities
+│   │   │   ├── firebase.js            # Firebase config
+│   │   │   └── platformColors.js      # Platform color coding
+│   │   ├── App.vue                    # Root component
+│   │   ├── main.js                    # Entry point
+│   │   └── style.css                  # Global styles
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.js
+│   └── tailwind.config.js
+├── .env                       # Backend environment variables
+├── .env.docker                # Docker environment variables
+├── Dockerfile                 # Multi-stage Docker build
+├── Makefile                   # Build automation
 ├── go.mod
 ├── go.sum
-├── Dockerfile
 └── README.md
 ```
-
-## Setup
-
-### Prerequisites
-
-- Go 1.25 or higher
-- IGDB API credentials (Client ID and Client Secret)
-- Notion API token and database ID
-
-### Environment Variables
-
-Create a `.env` file in the project root:
-
-```env
-IGDB_CLIENT_ID=your_igdb_client_id
-IGDB_CLIENT_SECRET=your_igdb_client_secret
-NOTION_TOKEN=your_notion_token
-NOTION_DATABASE_ID=your_database_id
-DRY_RUN=false  # Optional: set to true to run without updating Notion
-```
-
+## 🔄 Background Sync
+The background worker runs automatically every 15 minutes:
+**For Matched Games (with IGDB ID):**
+- Fetches latest metadata from IGDB
+- Updates: title, cover URL, rating, genres, platforms, release date, Steam URL, official website
+- Sets `last_sync_error` field if sync fails
+- Clears `last_sync_error` on successful sync
+**For Unmatched Games (no IGDB ID):**
+- Searches IGDB by game title
+- If single match found: Auto-matches and updates metadata
+- If multiple matches: Sets `needs_review` flag for manual matching
+- Prevents duplicate entries during auto-matching
+**Error Handling:**
+- Errors logged to stdout
+- Failed games marked with `last_sync_error` 
+- Sync continues for remaining games (non-blocking)
+## 📱 Progressive Web App (PWA)
+The app is fully installable as a PWA on mobile and desktop devices.
 ### Installation
-
-1. Clone the repository
-2. Install dependencies:
-   ```bash
-   go mod download
-   ```
-
-## Usage
-
-### Run Once
-
+**Android (Chrome/Edge):**
+1. Open app in browser
+2. Tap menu (⋮) → "Install app"
+3. Confirm installation
+**iOS (Safari):**
+1. Open app in Safari
+2. Tap Share (□↑) → "Add to Home Screen"
+3. Tap "Add"
+**Desktop (Chrome/Edge):**
+- Click install icon in address bar
+- Or go to Settings → "Install Game Tracker"
+### PWA Features
+- **Standalone Mode**: Runs without browser UI
+- **Offline Support**: Service worker caches static assets
+- **App Icon**: Custom game controller icon
+- **Theme Colors**: Dark theme matching app design
+- **Network-First Strategy**: Always fetches latest content when online
+- **Cache Fallback**: Shows cached content when offline
+### PWA Files
+- `frontend/public/manifest.json` - App metadata
+- `frontend/public/service-worker.js` - Offline caching
+- `frontend/public/icon.png` - 512x512 app icon
+- `frontend/public/icon.svg` - Vector icon
+## 🔄 Migration from Notion
+If you're migrating from the original Notion-based system, use the migration tool:
 ```bash
-go run cmd/updater/main.go
+# Build migration tool
+go build -o migrate cmd/migrate/main.go
+# Run migration (requires Notion credentials in .env)
+./migrate --user-id=your-firebase-uid
 ```
-
-### Run Continuously
-
+**What it migrates:**
+- Game titles
+- IGDB IDs (strips `:` prefix if present)
+- Status (Backlog, Break, Playing, Done, Abandoned, Won't Play)
+- Date played (if available)
+**What happens after:**
+- Background sync automatically fetches full metadata from IGDB
+- Games are matched to IGDB entries
+- All other fields (cover art, genres, platforms, etc.) populated automatically
+**Duplicate Handling:**
+- Checks for existing games by IGDB ID
+- Skips duplicates during migration
+- Updates existing entries if date played is missing
+**Requirements:**
+- Notion database with "Status", "IGDB ID", and "Date Played" properties
+- Environment variables: `NOTION_TOKEN`, `NOTION_DATABASE_ID`
+- Firebase user ID for ownership attribution
+## 🛠️ Makefile Commands
+The project includes a comprehensive Makefile for easy development and deployment:
 ```bash
-go run cmd/updater/main.go -run-forever -interval 15
+make help           # Show all available commands
+make install        # Install Go and npm dependencies
+make build-frontend # Build frontend only
+make build-backend  # Build backend (embeds frontend)
+make build          # Build everything (frontend + backend)
+make run            # Build and run server
+make dev-setup      # Setup development environment (run once)
+make dev-backend    # Run backend in dev mode
+make dev-frontend   # Run frontend dev server (hot reload)
+make dev            # Setup and show dev instructions
+make clean          # Clean all build artifacts
+make docker-build   # Build Docker image
+make docker-run     # Run Docker container
 ```
-
-### Dry-Run Mode
-
-Test without updating Notion (via CLI flag):
+## 🐛 Troubleshooting
+### Frontend not found error
+If you get "Frontend not found" when running `make dev-backend`:
 ```bash
-go run cmd/updater/main.go --dry-run
+make dev-setup  # Re-run setup
 ```
-
-Or via environment variable:
+### Service worker caching old version
+Clear service worker cache in browser DevTools:
+1. Open DevTools → Application → Service Workers
+2. Click "Unregister"
+3. Hard refresh (Ctrl+Shift+R)
+### Firebase authentication errors
+- Ensure Firebase project has Authentication enabled
+- Add your domain to authorized domains in Firebase Console
+- Check that API keys in `frontend/.env` are correct
+### IGDB API rate limits
+- Free tier: 4 requests per second
+- Cache prevents excessive API calls
+- Background sync respects rate limits
+### Build issues
+If the build fails:
 ```bash
-DRY_RUN=true go run cmd/updater/main.go
+make clean      # Clean all artifacts
+make install    # Reinstall dependencies
+make build      # Try building again
 ```
-
-### Command-Line Options
-
-- `-run-forever`: Run the updater in a loop
-- `-interval <minutes>`: Interval in minutes between updates (default: 15)
-- `-dry-run`: Run without updating Notion pages
-
-### Build Binary
-
-```bash
-go build -o updater cmd/updater/main.go
-./updater -run-forever
-```
-
-## Docker
-
-### Build
-
-```bash
-docker build -t notion-games-updater .
-```
-
-### Run
-
-```bash
-docker run --env-file .env notion-games-updater
-```
-
-The default Docker command runs the updater continuously with a 15-minute interval.
-
-To run once:
-```bash
-docker run --env-file .env notion-games-updater ./updater
-```
-
-To run in dry-run mode:
-```bash
-docker run --env-file .env -e DRY_RUN=true notion-games-updater
-```
-
-## Notion Database Configuration
-
-The Notion database should have a template named `Game` with the following properties:
-
-| Property             | Type         | Description                                                                             |
-|----------------------|--------------|-----------------------------------------------------------------------------------------|
-| Game                 | Title        | Name of the game (will be auto-updated from IGDB)                                       |
-| Rating               | Number       | Critic Rating of the game                                                               |
-| Release Date         | Date         | Release Date, as a date, can be used for formulas, can be empty                         |
-| Release Date (Human) | Text         | Human-readable release date, will be "TBD" when unknown                                 |
-| Genres               | Multi-Select | Genres of the game, will auto-populate from IGDB                                        |
-| Platforms            | Multi-Select | Platforms the game is available on, will auto-populate from IGDB                        |
-| Store URL            | URL          | URL of the store where the game is available from (PC only), priority is given to Steam |
-| IGDB ID              | Text         | ID from IGDB, once populated, will be used to refresh the info                          |
-| _Other Results       | Text         | See "Game Search" below for details                                                     |
-
-## Game Search
-
-The script will search for games in the IGDB API based on the name of the game (title of the entry) in the Notion database. 
-If the search returns multiple results, the script will use the first result to fill the entry, and will populate the 
-`_Other Results` property with the names and IDs of the other games. 
-The user can then manually select the correct game and populate the `IGDB ID` property with the correct ID.
-
-To determine if the ID was provided by the user, the script will check if the `IGDB ID` property starts with `:`.
-Users should not place a `:` in front of the ID, as the script will add it automatically, and use it to clear the 
-`_Other Results` property.
-
-## Architecture
-
-### Layers
-
-1. **CMD Layer** (`cmd/updater`): CLI entry point and argument parsing
-2. **Use Case Layer** (`internal/usecase`): Business logic orchestration
-3. **Domain Layer** (`internal/domain`): Core domain models and types
-4. **External Clients** (`internal/igdb`, `internal/notion`): API client implementations
-5. **Config Layer** (`internal/config`): Configuration management
-
-### Key Components
-
-- **IGDB Client**: Handles authentication, rate limiting, and API requests to IGDB
-- **Notion Mapper**: Converts IGDB game data to Notion properties
-- **Update Games Use Case**: Orchestrates the update process:
-  1. Query Notion database for pages
-  2. For each page, fetch game data from IGDB
-  3. Map game data to Notion properties
-  4. Update the Notion page (unless in dry-run mode)
+## 📝 License
+MIT
+## 🙏 Acknowledgments
+- **IGDB** for game metadata API
+- **Firebase** for authentication and database
+- **Sturdyc** for high-performance caching
+- **Vue.js** and **Tailwind CSS** for the UI framework

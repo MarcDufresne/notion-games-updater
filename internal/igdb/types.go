@@ -1,4 +1,14 @@
-package domain
+package igdb
+
+type WebsiteCategory int
+
+const (
+	WebsiteCategoryOfficial  WebsiteCategory = 1
+	WebsiteCategorySteam     WebsiteCategory = 13
+	WebsiteCategoryItch      WebsiteCategory = 15
+	WebsiteCategoryEpicGames WebsiteCategory = 16
+	WebsiteCategoryGOG       WebsiteCategory = 17
+)
 
 type Cover struct {
 	ID      int    `json:"id"`
@@ -21,9 +31,13 @@ type Genre struct {
 }
 
 type Website struct {
-	Category WebsiteCategory `json:"category"`
-	URL      string          `json:"url"`
+	Type WebsiteCategory `json:"type"`
+	URL  string          `json:"url"`
 }
+
+type ReleaseDateStatusType string
+type ReleaseCategory int
+type ReleaseRegion int
 
 type ReleaseDateStatus struct {
 	ID   int                   `json:"id"`

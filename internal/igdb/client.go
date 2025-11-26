@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
-	"strconv"
 	"sync"
 	"time"
 )
@@ -31,6 +31,14 @@ type tokenResponse struct {
 	ExpiresIn   int    `json:"expires_in"`
 }
 
+// SearchCandidate represents a minimal game result for search
+type SearchCandidate struct {
+	ID          int    `json:"id"`
+	Name        string `json:"name"`
+	CoverURL    string `json:"cover_url"`
+	ReleaseYear int    `json:"release_year"`
+}
+
 func NewClient(clientID, clientSecret string) *Client {
 	return &Client{
 		clientID:     clientID,
@@ -45,6 +53,7 @@ func (c *Client) refreshToken() error {
 	params := fmt.Sprintf("?client_id=%s&client_secret=%s&grant_type=client_credentials",
 		c.clientID, c.clientSecret)
 
+	log.Println("[IGDB] Refreshing access token...")
 	resp, err := c.httpClient.Post(authURL+params, "application/json", nil)
 	if err != nil {
 		return fmt.Errorf("failed to refresh token: %w", err)
@@ -53,6 +62,7 @@ func (c *Client) refreshToken() error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		log.Printf("[IGDB] Token refresh failed with status %d: %s", resp.StatusCode, string(body))
 		return fmt.Errorf("failed to refresh token [%d]: %s", resp.StatusCode, string(body))
 	}
 
@@ -64,6 +74,7 @@ func (c *Client) refreshToken() error {
 	c.accessToken = tokenResp.AccessToken
 	c.accessTokenExpires = time.Now().Unix() + int64(tokenResp.ExpiresIn)
 
+	log.Printf("[IGDB] Token refreshed successfully (expires in %d seconds)", tokenResp.ExpiresIn)
 	return nil
 }
 
@@ -103,6 +114,7 @@ func (c *Client) request(endpoint, query string) (*http.Response, error) {
 		if resp.StatusCode == http.StatusTooManyRequests {
 			resp.Body.Close()
 			tryCount = 0
+			log.Printf("[IGDB] Rate limited, retrying after 250ms...")
 			time.Sleep(250 * time.Millisecond)
 			continue
 		}
@@ -111,9 +123,11 @@ func (c *Client) request(endpoint, query string) (*http.Response, error) {
 		if tryCount > retries {
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
+			log.Printf("[IGDB] Request failed after %d retries [%d]: %s", retries, resp.StatusCode, string(body))
 			return nil, fmt.Errorf("failed to make request [%d]: %s", resp.StatusCode, string(body))
 		}
 		resp.Body.Close()
+		log.Printf("[IGDB] Request failed with status %d, retry %d/%d", resp.StatusCode, tryCount, retries)
 	}
 
 	return resp, nil
@@ -134,59 +148,71 @@ func (c *Client) Request(endpoint, query string) ([]byte, error) {
 	return body, nil
 }
 
-func (c *Client) ListAll(endpoint, query string) ([]byte, error) {
-	resp, err := c.request(endpoint, query)
+// Search performs a search query on IGDB and returns minimal candidate results
+func (c *Client) Search(query string) ([]SearchCandidate, error) {
+	log.Printf("[IGDB] Searching for: %q", query)
+	searchQuery := fmt.Sprintf(`fields game.name,game.cover.*,game.first_release_date; search "%s"; where game != null & game.game_type.type != (13) & game.version_parent = null; limit 10;`, query)
+
+	body, err := c.Request("search", searchQuery)
 	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response body: %w", err)
+		log.Printf("[IGDB] Search failed for %q: %v", query, err)
+		return nil, fmt.Errorf("failed to search games: %w", err)
 	}
 
-	var data []json.RawMessage
-	if err := json.Unmarshal(body, &data); err != nil {
-		return nil, fmt.Errorf("expected a list response: %w", err)
+	var results []SearchResult
+	if err := json.Unmarshal(body, &results); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal search response: %w", err)
 	}
 
-	totalStr := resp.Header.Get("x-count")
-	if totalStr == "" {
-		return body, nil
-	}
-
-	total, err := strconv.Atoi(totalStr)
-	if err != nil {
-		return body, nil
-	}
-
-	offset := len(data)
-	allData := data
-
-	for offset < total {
-		newQuery := fmt.Sprintf("%s offset %d;", query, offset)
-		fmt.Println(newQuery)
-
-		resp, err := c.request(endpoint, newQuery)
-		if err != nil {
-			return nil, err
+	candidates := make([]SearchCandidate, 0, len(results))
+	for _, result := range results {
+		if result.Game == nil {
+			continue
 		}
 
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return nil, fmt.Errorf("failed to read response body: %w", err)
+		candidate := SearchCandidate{
+			ID:   result.Game.ID,
+			Name: result.Game.Name,
 		}
 
-		var newData []json.RawMessage
-		if err := json.Unmarshal(body, &newData); err != nil {
-			return nil, fmt.Errorf("failed to unmarshal paginated response: %w", err)
+		if result.Game.Cover != nil {
+			candidate.CoverURL = result.Game.Cover.CoverBig2xURL()
 		}
 
-		allData = append(allData, newData...)
-		offset += len(newData)
+		if result.Game.FirstReleaseDate != nil {
+			releaseTime := time.Unix(*result.Game.FirstReleaseDate, 0)
+			candidate.ReleaseYear = releaseTime.Year()
+		}
+
+		candidates = append(candidates, candidate)
 	}
 
-	return json.Marshal(allData)
+	log.Printf("[IGDB] Search for %q returned %d results", query, len(candidates))
+	return candidates, nil
+}
+
+// GetGameByID fetches full game details by IGDB ID
+func (c *Client) GetGameByID(id int) (*Game, error) {
+	log.Printf("[IGDB] Fetching game details for ID: %d", id)
+	query := fmt.Sprintf(`fields name,url,aggregated_rating,category,first_release_date,platforms.*,cover.*,genres.*,websites.*,game_type.*,release_dates.*,release_dates.status.*,release_dates.platform.*,parent_game.id,parent_game.name,url,updated_at; where id = %d;`, id)
+
+	body, err := c.Request("games", query)
+	if err != nil {
+		log.Printf("[IGDB] Failed to fetch game ID %d: %v", id, err)
+		return nil, fmt.Errorf("failed to fetch game: %w", err)
+	}
+
+	var games []*Game
+	if err := json.Unmarshal(body, &games); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal game response: %w", err)
+	}
+
+	if len(games) == 0 {
+		log.Printf("[IGDB] Game ID %d not found", id)
+		return nil, fmt.Errorf("game with ID %d not found", id)
+	}
+
+	log.Printf("[IGDB] Successfully fetched game: %s (ID: %d)", games[0].Name, id)
+
+	return games[0], nil
 }
