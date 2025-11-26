@@ -1,4 +1,3 @@
-const DATE_PLAYED_SENTINEL = new Date('1970-01-01T00:00:00Z')
 
 export function isReleaseDateSentinel(dateString) {
   if (!dateString) return false
