@@ -84,6 +84,47 @@
       </div>
       </div>
     </Teleport>
+
+    <!-- Date Picker Modal - Teleported to body -->
+    <Teleport to="body">
+      <div
+        v-if="showDatePicker"
+        class="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+        @click.self="cancelDateSelection"
+      >
+        <div class="bg-gray-800 rounded-lg shadow-2xl p-6 border border-gray-700 max-w-sm w-full mx-4" @click.stop>
+          <h3 class="text-lg font-semibold text-white mb-4">
+            When did you {{ selectedStatus === 'Done' ? 'complete' : selectedStatus === 'Abandoned' ? 'abandon' : 'decide not to play' }} this game?
+          </h3>
+
+          <div class="mb-6">
+            <label class="block text-sm font-medium text-gray-400 mb-2">Date Played</label>
+            <input
+              ref="datePicker"
+              type="date"
+              v-model="selectedDate"
+              class="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :max="new Date().toISOString().split('T')[0]"
+            />
+          </div>
+
+          <div class="flex gap-3">
+            <button
+              @click="cancelDateSelection"
+              class="flex-1 px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              @click="confirmDateSelection"
+              class="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors"
+            >
+              Confirm
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -100,9 +141,13 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const isOpen = ref(false)
+const showDatePicker = ref(false)
+const selectedStatus = ref(null)
+const selectedDate = ref(null)
 const statusPicker = ref(null)
 const statusButton = ref(null)
 const dropdown = ref(null)
+const datePicker = ref(null)
 
 const dropdownStyle = ref({})
 
@@ -116,11 +161,31 @@ function calculateDropdownPosition() {
   const buttonRect = statusButton.value.getBoundingClientRect()
   const dropdownWidth = buttonRect.width
 
-  dropdownStyle.value = {
-    top: `${buttonRect.bottom + 8}px`,
-    left: `${buttonRect.left}px`,
-    width: `${dropdownWidth}px`,
-    minWidth: '200px'
+  // Estimate dropdown height (3 groups with headers + buttons)
+  // To-do: 2 items, In Progress: 1 item, Complete: 3 items
+  // Header height ~32px, button height ~40px
+  const estimatedDropdownHeight = (3 * 32) + (6 * 40) + 20 // headers + buttons + padding
+
+  const spaceBelow = window.innerHeight - buttonRect.bottom
+  const spaceAbove = buttonRect.top
+
+  // Check if there's enough space below, otherwise position above
+  const shouldPositionAbove = spaceBelow < estimatedDropdownHeight && spaceAbove > spaceBelow
+
+  if (shouldPositionAbove) {
+    dropdownStyle.value = {
+      bottom: `${window.innerHeight - buttonRect.top + 8}px`,
+      left: `${buttonRect.left}px`,
+      width: `${dropdownWidth}px`,
+      minWidth: '200px'
+    }
+  } else {
+    dropdownStyle.value = {
+      top: `${buttonRect.bottom + 8}px`,
+      left: `${buttonRect.left}px`,
+      width: `${dropdownWidth}px`,
+      minWidth: '200px'
+    }
   }
 }
 
@@ -132,22 +197,67 @@ async function toggleDropdown() {
   }
 }
 
-// Recalculate position on scroll or resize
+// Recalculate position on scroll or resize (throttled for performance)
+let scrollThrottle = null
+let resizeThrottle = null
+
 function handleScroll() {
-  if (isOpen.value) {
+  if (!isOpen.value) return
+
+  if (scrollThrottle) return
+
+  scrollThrottle = setTimeout(() => {
     calculateDropdownPosition()
-  }
+    scrollThrottle = null
+  }, 16) // ~60fps
 }
 
 function handleResize() {
-  if (isOpen.value) {
+  if (!isOpen.value) return
+
+  if (resizeThrottle) return
+
+  resizeThrottle = setTimeout(() => {
     calculateDropdownPosition()
-  }
+    resizeThrottle = null
+  }, 100)
 }
 
 function selectStatus(status) {
-  emit('update:modelValue', status)
-  isOpen.value = false
+  const completedStatuses = ['Done', 'Abandoned', "Won't Play"]
+
+  if (completedStatuses.includes(status)) {
+    // Show date picker for completed statuses
+    selectedStatus.value = status
+    isOpen.value = false
+    showDatePicker.value = true
+    // Default to today
+    const today = new Date().toISOString().split('T')[0]
+    selectedDate.value = today
+  } else {
+    // Immediately emit for non-completed statuses
+    emit('update:modelValue', status)
+    isOpen.value = false
+  }
+}
+
+function confirmDateSelection() {
+  if (selectedStatus.value && selectedDate.value) {
+    // Convert date string (YYYY-MM-DD) to ISO 8601 datetime string
+    // Set time to noon UTC to avoid timezone issues
+    const dateObj = new Date(selectedDate.value + 'T12:00:00Z')
+    const isoDateString = dateObj.toISOString()
+    emit('update:modelValue', selectedStatus.value, isoDateString)
+  }
+  showDatePicker.value = false
+  selectedStatus.value = null
+  selectedDate.value = null
+}
+
+function cancelDateSelection() {
+  showDatePicker.value = false
+  selectedStatus.value = null
+  selectedDate.value = null
 }
 
 function getStatusColor(status) {
@@ -163,7 +273,7 @@ function getStatusColor(status) {
     case 'Abandoned':
       return 'bg-red-600 text-red-100 hover:bg-red-500 focus:ring-red-500'
     case "Won't Play":
-      return 'bg-gray-800 text-gray-300 hover:bg-gray-700 focus:ring-gray-700'
+      return 'bg-gray-700 text-gray-200 hover:bg-gray-600 focus:ring-gray-600 border border-gray-600'
     default:
       return 'bg-gray-700 text-gray-200 hover:bg-gray-600 focus:ring-gray-600'
   }
@@ -212,24 +322,36 @@ function getStatusIcon(status) {
 
 // Close dropdown when clicking outside
 function handleClickOutside(event) {
-  if (statusPicker.value && !statusPicker.value.contains(event.target)) {
-    // Also check if click is inside the dropdown (which is teleported to body)
-    if (dropdown.value && !dropdown.value.contains(event.target)) {
-      isOpen.value = false
-    }
+  if (!isOpen.value) return // Don't process if dropdown isn't open
+
+  // Check if click is inside the status picker button
+  if (statusPicker.value && statusPicker.value.contains(event.target)) {
+    return
   }
+
+  // Check if click is inside the dropdown (which is teleported to body)
+  if (dropdown.value && dropdown.value.contains(event.target)) {
+    return
+  }
+
+  // Click is outside both - close the dropdown
+  isOpen.value = false
 }
 
 onMounted(() => {
-  document.addEventListener('click', handleClickOutside)
-  window.addEventListener('scroll', handleScroll, true) // Use capture phase
-  window.addEventListener('resize', handleResize)
+  document.addEventListener('click', handleClickOutside, true) // Use capture phase
+  window.addEventListener('scroll', handleScroll, { capture: true, passive: true })
+  window.addEventListener('resize', handleResize, { passive: true })
 })
 
 onUnmounted(() => {
-  document.removeEventListener('click', handleClickOutside)
-  window.removeEventListener('scroll', handleScroll, true)
-  window.removeEventListener('resize', handleResize)
+  document.removeEventListener('click', handleClickOutside, true) // Use capture phase
+  window.removeEventListener('scroll', handleScroll, { capture: true, passive: true })
+  window.removeEventListener('resize', handleResize, { passive: true })
+
+  // Clear any pending throttles
+  if (scrollThrottle) clearTimeout(scrollThrottle)
+  if (resizeThrottle) clearTimeout(resizeThrottle)
 })
 </script>
 

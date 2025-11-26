@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -70,6 +71,28 @@ func (c *Client) SaveGame(ctx context.Context, game *model.Game) error {
 	}
 	game.UpdatedAt = now
 
+	// Set sentinel values for nil dates to enable proper sorting in Firestore
+	// Games without release dates get far future date (sort to end)
+	if game.ReleaseDate == nil {
+		farFuture := time.Date(2100, 1, 1, 0, 0, 0, 0, time.UTC)
+		game.ReleaseDate = &farFuture
+	}
+
+	// Games without date_played get epoch (sort to end when descending)
+	if game.DatePlayed == nil {
+		epoch := time.Unix(0, 0)
+		game.DatePlayed = &epoch
+	}
+
+	// Set match status if not already set
+	if game.MatchStatus == "" {
+		if game.IGDBID > 0 {
+			game.MatchStatus = model.MatchStatusMatched
+		} else {
+			game.MatchStatus = model.MatchStatusUnmatched
+		}
+	}
+
 	// Generate ID if not present
 	if game.ID == "" {
 		docRef := c.firestore.Collection(gamesCollection).NewDoc()
@@ -94,6 +117,31 @@ func (c *Client) GetGame(ctx context.Context, gameID string) (*model.Game, error
 
 	var game model.Game
 	if err := doc.DataTo(&game); err != nil {
+		return nil, fmt.Errorf("failed to parse game: %w", err)
+	}
+
+	return &game, nil
+}
+
+// GetGameByIGDBID retrieves a game by IGDB ID for a specific user
+// Returns nil if no game is found
+func (c *Client) GetGameByIGDBID(ctx context.Context, userID string, igdbID int) (*model.Game, error) {
+	docs, err := c.firestore.Collection(gamesCollection).
+		Where("user_id", "==", userID).
+		Where("igdb_id", "==", igdbID).
+		Limit(1).
+		Documents(ctx).GetAll()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query game by IGDB ID: %w", err)
+	}
+
+	if len(docs) == 0 {
+		return nil, nil // No game found
+	}
+
+	var game model.Game
+	if err := docs[0].DataTo(&game); err != nil {
 		return nil, fmt.Errorf("failed to parse game: %w", err)
 	}
 
@@ -126,6 +174,7 @@ func (c *Client) GetGames(ctx context.Context, userID string, statuses ...model.
 }
 
 // GetBacklog retrieves backlog games (Backlog and Break) sorted by release date ASC
+// Games without release dates have sentinel far-future date and sort to end
 func (c *Client) GetBacklog(ctx context.Context, userID string) ([]*model.Game, error) {
 	docs, err := c.firestore.Collection(gamesCollection).
 		Where("user_id", "==", userID).
@@ -202,6 +251,7 @@ func (c *Client) GetPlaying(ctx context.Context, userID string) ([]*model.Game, 
 }
 
 // GetHistory retrieves completed games (Done, Abandoned, Won't Play) sorted by date_played DESC
+// Games without date_played have sentinel epoch date and sort to end
 func (c *Client) GetHistory(ctx context.Context, userID string) ([]*model.Game, error) {
 	docs, err := c.firestore.Collection(gamesCollection).
 		Where("user_id", "==", userID).
@@ -225,11 +275,34 @@ func (c *Client) GetHistory(ctx context.Context, userID string) ([]*model.Game, 
 	return games, nil
 }
 
+// GetAllGames retrieves all games for a user sorted by release date DESC (newest first)
+// Games without release dates (sentinel values) sort to the end
+func (c *Client) GetAllGames(ctx context.Context, userID string) ([]*model.Game, error) {
+	docs, err := c.firestore.Collection(gamesCollection).
+		Where("user_id", "==", userID).
+		OrderBy("release_date", firestore.Desc).
+		Documents(ctx).GetAll()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query all games: %w", err)
+	}
+
+	games := make([]*model.Game, 0, len(docs))
+	for _, doc := range docs {
+		var game model.Game
+		if err := doc.DataTo(&game); err != nil {
+			return nil, fmt.Errorf("failed to parse game: %w", err)
+		}
+		games = append(games, &game)
+	}
+
+	return games, nil
+}
+
 // GetGamesWithIGDBID retrieves all games that have an IGDB ID for background sync
 func (c *Client) GetGamesWithIGDBID(ctx context.Context) ([]*model.Game, error) {
-	// Firestore doesn't support "!= null" directly, so we use a range query
 	docs, err := c.firestore.Collection(gamesCollection).
-		Where("igdb_id", ">=", 0).
+		Where("igdb_id", ">", 0).
 		Documents(ctx).GetAll()
 
 	if err != nil {
@@ -242,16 +315,36 @@ func (c *Client) GetGamesWithIGDBID(ctx context.Context) ([]*model.Game, error) 
 		if err := doc.DataTo(&game); err != nil {
 			return nil, fmt.Errorf("failed to parse game: %w", err)
 		}
-		if game.IGDBID != nil {
-			games = append(games, &game)
+		games = append(games, &game)
+	}
+
+	return games, nil
+}
+
+// GetUnmatchedGames retrieves games without IGDB IDs (manual entries needing matching)
+func (c *Client) GetUnmatchedGames(ctx context.Context) ([]*model.Game, error) {
+	docs, err := c.firestore.Collection(gamesCollection).
+		Where("igdb_id", "==", 0).
+		Documents(ctx).GetAll()
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to query unmatched games: %w", err)
+	}
+
+	games := make([]*model.Game, 0, len(docs))
+	for _, doc := range docs {
+		var game model.Game
+		if err := doc.DataTo(&game); err != nil {
+			return nil, fmt.Errorf("failed to parse game: %w", err)
 		}
+		games = append(games, &game)
 	}
 
 	return games, nil
 }
 
 // UpdateGameStatus updates only the status of a game
-func (c *Client) UpdateGameStatus(ctx context.Context, gameID string, status model.GameStatus) error {
+func (c *Client) UpdateGameStatus(ctx context.Context, gameID string, status model.GameStatus, datePlayed *time.Time) error {
 	updates := []firestore.Update{
 		{Path: "status", Value: status},
 		{Path: "updated_at", Value: time.Now()},
@@ -259,7 +352,19 @@ func (c *Client) UpdateGameStatus(ctx context.Context, gameID string, status mod
 
 	// If status is being changed to a completed state, update date_played
 	if status == model.StatusDone || status == model.StatusAbandoned || status == model.StatusWontPlay {
-		updates = append(updates, firestore.Update{Path: "date_played", Value: time.Now()})
+		// Use provided date or default to now
+		playedDate := time.Now()
+		if datePlayed != nil {
+			playedDate = *datePlayed
+			log.Printf("DEBUG: Using provided date_played: %v", playedDate)
+		} else {
+			log.Printf("DEBUG: No date_played provided, using current time: %v", playedDate)
+		}
+		updates = append(updates, firestore.Update{Path: "date_played", Value: playedDate})
+	} else if status == model.StatusBacklog || status == model.StatusBreak || status == model.StatusPlaying {
+		// If moving back to non-complete status, reset date_played to epoch sentinel
+		epoch := time.Unix(0, 0)
+		updates = append(updates, firestore.Update{Path: "date_played", Value: epoch})
 	}
 
 	_, err := c.firestore.Collection(gamesCollection).Doc(gameID).Update(ctx, updates)
@@ -267,6 +372,17 @@ func (c *Client) UpdateGameStatus(ctx context.Context, gameID string, status mod
 		return fmt.Errorf("failed to update game status: %w", err)
 	}
 
+	return nil
+}
+
+// DeleteGame permanently deletes a game from the database
+func (c *Client) DeleteGame(ctx context.Context, gameID string) error {
+	_, err := c.firestore.Collection(gamesCollection).Doc(gameID).Delete(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to delete game: %w", err)
+	}
+
+	log.Printf("Successfully deleted game from Firestore: %s", gameID)
 	return nil
 }
 

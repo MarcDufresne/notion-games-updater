@@ -1,11 +1,11 @@
 <template>
   <div class="container mx-auto px-4 py-8">
-    <h1 class="text-3xl font-bold mb-6 text-white">History</h1>
+    <h1 class="text-3xl font-bold mb-6 text-white">All Games</h1>
 
     <div v-if="groupedGames.length > 0">
       <div v-for="group in groupedGames" :key="group.year" class="mb-8">
         <h2 class="text-2xl font-semibold mb-4 border-b-2 border-gray-700 pb-2 text-gray-200">
-          {{ group.year || 'No Date' }}
+          {{ group.year }}
         </h2>
         <TransitionGroup name="game-list" tag="div" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <GameCard
@@ -19,7 +19,7 @@
       </div>
     </div>
     <div v-else class="text-gray-400 text-center py-8 bg-gray-800/50 rounded-lg border border-gray-700">
-      No games in history.
+      No games in your library.
     </div>
 
     <!-- Game Details Modal -->
@@ -38,7 +38,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useGamesStore } from '../stores/games'
 import GameCard from '../components/GameCard.vue'
 import GameDetailsModal from '../components/GameDetailsModal.vue'
-import { formatDatePlayed, isDatePlayedSentinel } from '../lib/dateUtils'
+import { isReleaseDateSentinel } from '../lib/dateUtils'
 
 const gamesStore = useGamesStore()
 const isModalOpen = ref(false)
@@ -47,17 +47,20 @@ const selectedGameId = ref(null)
 // Computed to always get fresh game data from store
 const selectedGame = computed(() => {
   if (!selectedGameId.value) return {}
-  return gamesStore.history.find(g => g.id === selectedGameId.value) || {}
+  return gamesStore.all.find(g => g.id === selectedGameId.value) || {}
 })
 
 const groupedGames = computed(() => {
+  // Use games from store's 'all' state (fetched from backend API)
+  const allGames = gamesStore.all
+
+  // Group by release year
   const groups = {}
 
-  gamesStore.history.forEach(game => {
-    let year = 'No Date'
-    // Use date_played for grouping, and filter out sentinel values
-    if (game.date_played && !isDatePlayedSentinel(game.date_played)) {
-      const date = new Date(game.date_played)
+  allGames.forEach(game => {
+    let year = 'TBD'
+    if (game.release_date && !isReleaseDateSentinel(game.release_date)) {
+      const date = new Date(game.release_date)
       // Extract UTC year to avoid timezone issues
       year = date.getUTCFullYear()
     }
@@ -68,21 +71,34 @@ const groupedGames = computed(() => {
     groups[year].push(game)
   })
 
+  // Sort groups by year (descending), then sort games within each group by release date (descending)
   return Object.keys(groups)
     .sort((a, b) => {
-      // 'No Date' should come last
-      if (a === 'No Date') return 1
-      if (b === 'No Date') return -1
-      return b - a // Descending order
+      // TBD always goes last
+      if (a === 'TBD') return 1
+      if (b === 'TBD') return -1
+      return b - a // Descending order for years
     })
     .map(year => ({
       year,
-      games: groups[year]
+      games: groups[year].sort((a, b) => {
+        // Handle TBD dates
+        const aIsTBD = !a.release_date || isReleaseDateSentinel(a.release_date)
+        const bIsTBD = !b.release_date || isReleaseDateSentinel(b.release_date)
+
+        if (aIsTBD && bIsTBD) return a.title.localeCompare(b.title)
+        if (aIsTBD) return 1
+        if (bIsTBD) return -1
+
+        // Sort by release date descending (newest first)
+        return new Date(b.release_date) - new Date(a.release_date)
+      })
     }))
 })
 
 onMounted(() => {
-  gamesStore.fetchGames('history')
+  // Fetch all games from backend API (single optimized query)
+  gamesStore.fetchGames('all')
 })
 
 function openModal(game) {

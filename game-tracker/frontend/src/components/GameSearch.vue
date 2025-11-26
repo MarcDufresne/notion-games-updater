@@ -4,9 +4,21 @@
       v-model="searchText"
       type="text"
       placeholder="Search for a game..."
-      class="w-full px-4 py-3 text-lg border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white placeholder-gray-400"
+      class="w-full px-4 py-3 pr-12 text-lg border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-gray-700 text-white placeholder-gray-400"
       @focus="showDropdown = true"
     />
+
+    <!-- Clear Button -->
+    <button
+      v-if="searchText.trim().length > 0"
+      @click="clearSearch"
+      class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors p-1 rounded hover:bg-gray-600"
+      title="Clear search"
+    >
+      <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd" />
+      </svg>
+    </button>
 
     <div
       v-if="showDropdown && (searchResults.length > 0 || searchText.trim().length > 0)"
@@ -38,23 +50,26 @@
         </div>
       </div>
 
-      <!-- Manual Entry Option -->
+      <!-- No Results Message -->
       <div
-        v-if="searchText.trim().length > 0"
+        v-if="!isSearching && searchResults.length === 0 && searchText.trim().length > 0"
+        class="p-4 text-center text-gray-400 border-b border-gray-700"
+      >
+        No results found
+      </div>
+
+      <!-- Manual Entry Option - Always at the end -->
+      <div
+        v-if="searchText.trim().length > 0 && !isSearching"
         class="p-3 hover:bg-gray-700 cursor-pointer border-t-2 border-gray-600 transition-colors"
         @click="createManual"
       >
-        <div class="font-semibold text-blue-400">
-          ✏️ Manually create an entry for "{{ searchText }}"
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+          </svg>
+          <span class="font-semibold text-blue-400">Manually create an entry for "{{ searchText }}"</span>
         </div>
-      </div>
-
-      <!-- No Results -->
-      <div
-        v-if="!isSearching && searchResults.length === 0 && searchText.trim().length > 0"
-        class="p-4 text-center text-gray-400"
-      >
-        No results found
       </div>
     </div>
   </div>
@@ -113,6 +128,11 @@ async function selectGame(result) {
     emit('game-created', game)
   } catch (error) {
     console.error('Failed to create game:', error)
+    // Show toast notification
+    if (window.$toast) {
+      window.$toast.error(error.message, 5000)
+    }
+    showDropdown.value = false
   }
 }
 
@@ -129,7 +149,18 @@ async function createManual() {
     emit('game-created', game)
   } catch (error) {
     console.error('Failed to create game:', error)
+    // Show toast notification
+    if (window.$toast) {
+      window.$toast.error(error.message, 5000)
+    }
+    showDropdown.value = false
   }
+}
+
+function clearSearch() {
+  searchText.value = ''
+  searchResults.value = []
+  showDropdown.value = false
 }
 
 // Close dropdown when clicking outside

@@ -21,8 +21,8 @@ type Genre struct {
 }
 
 type Website struct {
-	Category WebsiteCategory `json:"category"`
-	URL      string          `json:"url"`
+	Type WebsiteCategory `json:"type"`
+	URL  string          `json:"url"`
 }
 
 type ReleaseDateStatus struct {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -77,6 +78,8 @@ func (h *Handler) getGames(w http.ResponseWriter, r *http.Request) {
 		games, err = h.db.GetHistory(r.Context(), userID)
 	case "calendar":
 		games, err = h.db.GetUpcoming(r.Context(), userID)
+	case "all":
+		games, err = h.db.GetAllGames(r.Context(), userID)
 	case "":
 		// Return all games if no view specified
 		games, err = h.db.GetGames(r.Context(), userID)
@@ -97,7 +100,7 @@ func (h *Handler) getGames(w http.ResponseWriter, r *http.Request) {
 // CreateGameRequest represents a request to create a new game
 type CreateGameRequest struct {
 	Title     string           `json:"title"`
-	IGDBID    *int             `json:"igdb_id,omitempty"`
+	IGDBID    int              `json:"igdb_id,omitempty"` // 0 means no IGDB ID
 	Status    model.GameStatus `json:"status,omitempty"`
 	CoverURL  string           `json:"cover_url,omitempty"`
 	Rating    int              `json:"rating,omitempty"`
@@ -143,16 +146,32 @@ func (h *Handler) createGame(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// If IGDB ID is provided, fetch metadata immediately
-	if req.IGDBID != nil {
-		igdbGame, err := h.igdbClient.GetGameByID(*req.IGDBID)
+	if req.IGDBID > 0 {
+		// Check if game already exists for this user
+		existingGame, err := h.db.GetGameByIGDBID(r.Context(), userID, req.IGDBID)
 		if err != nil {
-			log.Printf("ERROR: Failed to fetch IGDB metadata for game ID %d: %v", *req.IGDBID, err)
+			log.Printf("ERROR: Failed to check for duplicate game: %v", err)
+			http.Error(w, "Failed to check for existing game", http.StatusInternalServerError)
+			return
+		}
+
+		if existingGame != nil {
+			log.Printf("Game with IGDB ID %d already exists for user %s (game ID: %s)", req.IGDBID, userID, existingGame.ID)
+			http.Error(w, fmt.Sprintf("Game already exists in your library: %s", existingGame.Title), http.StatusConflict)
+			return
+		}
+
+		igdbGame, err := h.igdbClient.GetGameByID(req.IGDBID)
+		if err != nil {
+			log.Printf("ERROR: Failed to fetch IGDB metadata for game ID %d: %v", req.IGDBID, err)
 			http.Error(w, "Failed to fetch game metadata from IGDB", http.StatusInternalServerError)
 			return
 		}
 
 		enrichGameFromIGDB(game, igdbGame)
 	} else {
+		// Manual entry - ensure IGDB ID is 0
+		game.IGDBID = 0
 		// Use provided metadata for manual entries
 		game.CoverURL = req.CoverURL
 		game.Rating = req.Rating
@@ -193,12 +212,25 @@ func (h *Handler) handleGameByID(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Check if this is a match update request
+	if len(parts) == 2 && parts[1] == "match" && r.Method == http.MethodPost {
+		h.updateGameMatch(w, r, userID, gameID)
+		return
+	}
+
+	// Handle DELETE request for game
+	if len(parts) == 1 && r.Method == http.MethodDelete {
+		h.deleteGame(w, r, userID, gameID)
+		return
+	}
+
 	http.Error(w, "Not found", http.StatusNotFound)
 }
 
 // UpdateStatusRequest represents a request to update game status
 type UpdateStatusRequest struct {
-	Status model.GameStatus `json:"status"`
+	Status     model.GameStatus `json:"status"`
+	DatePlayed *time.Time       `json:"date_played,omitempty"`
 }
 
 // updateGameStatus handles POST /api/v1/games/{id}/status
@@ -207,6 +239,13 @@ func (h *Handler) updateGameStatus(w http.ResponseWriter, r *http.Request, userI
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
+	}
+
+	// Debug logging
+	if req.DatePlayed != nil {
+		log.Printf("DEBUG: Received date_played: %v", *req.DatePlayed)
+	} else {
+		log.Printf("DEBUG: No date_played provided")
 	}
 
 	if !req.Status.IsValid() {
@@ -228,7 +267,7 @@ func (h *Handler) updateGameStatus(w http.ResponseWriter, r *http.Request, userI
 	}
 
 	// Update status
-	if err := h.db.UpdateGameStatus(r.Context(), gameID, req.Status); err != nil {
+	if err := h.db.UpdateGameStatus(r.Context(), gameID, req.Status, req.DatePlayed); err != nil {
 		log.Printf("ERROR: Failed to update game status: %v", err)
 		http.Error(w, "Failed to update status", http.StatusInternalServerError)
 		return
@@ -243,6 +282,96 @@ func (h *Handler) updateGameStatus(w http.ResponseWriter, r *http.Request, userI
 	}
 
 	respondJSON(w, game)
+}
+
+// UpdateMatchRequest represents a request to update game IGDB match
+type UpdateMatchRequest struct {
+	IGDBID int `json:"igdb_id"`
+}
+
+// updateGameMatch handles POST /api/v1/games/{id}/match
+func (h *Handler) updateGameMatch(w http.ResponseWriter, r *http.Request, userID, gameID string) {
+	var req UpdateMatchRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Verify game belongs to user
+	game, err := h.db.GetGame(r.Context(), gameID)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch game: %v", err)
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	if game.UserID != userID {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	// Check if new IGDB ID already exists for this user
+	existingGame, err := h.db.GetGameByIGDBID(r.Context(), userID, req.IGDBID)
+	if err != nil {
+		log.Printf("ERROR: Failed to check for duplicate game: %v", err)
+		http.Error(w, "Failed to check for existing game", http.StatusInternalServerError)
+		return
+	}
+
+	if existingGame != nil && existingGame.ID != gameID {
+		log.Printf("Game with IGDB ID %d already exists for user %s (game ID: %s)", req.IGDBID, userID, existingGame.ID)
+		http.Error(w, fmt.Sprintf("This game already exists in your library: %s", existingGame.Title), http.StatusConflict)
+		return
+	}
+
+	// Fetch metadata from IGDB
+	igdbGame, err := h.igdbClient.GetGameByID(req.IGDBID)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch IGDB metadata for game ID %d: %v", req.IGDBID, err)
+		http.Error(w, "Failed to fetch game metadata from IGDB", http.StatusInternalServerError)
+		return
+	}
+
+	// Update game with IGDB data
+	game.IGDBID = req.IGDBID
+	game.MatchStatus = model.MatchStatusMatched
+	enrichGameFromIGDB(game, igdbGame)
+
+	// Save updated game
+	if err := h.db.SaveGame(r.Context(), game); err != nil {
+		log.Printf("ERROR: Failed to save game: %v", err)
+		http.Error(w, "Failed to save game", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Game match updated: %s (ID: %s) matched to IGDB ID: %d", game.Title, gameID, req.IGDBID)
+	respondJSON(w, game)
+}
+
+// deleteGame handles DELETE /api/v1/games/{id}
+func (h *Handler) deleteGame(w http.ResponseWriter, r *http.Request, userID, gameID string) {
+	// Verify game belongs to user
+	game, err := h.db.GetGame(r.Context(), gameID)
+	if err != nil {
+		log.Printf("ERROR: Failed to fetch game: %v", err)
+		http.Error(w, "Game not found", http.StatusNotFound)
+		return
+	}
+
+	if game.UserID != userID {
+		http.Error(w, "Forbidden", http.StatusForbidden)
+		return
+	}
+
+	// Delete the game
+	if err := h.db.DeleteGame(r.Context(), gameID); err != nil {
+		log.Printf("ERROR: Failed to delete game: %v", err)
+		http.Error(w, "Failed to delete game", http.StatusInternalServerError)
+		return
+	}
+
+	log.Printf("Game deleted: %s (ID: %s)", game.Title, gameID)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // handleSearch handles GET /api/v1/search?q={query}
@@ -282,10 +411,8 @@ func (h *Handler) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 // enrichGameFromIGDB populates game fields from IGDB data
 func enrichGameFromIGDB(game *model.Game, igdbGame *legacy_domain.Game) {
-	// Update title if not manually set
-	if game.Title == "" {
-		game.Title = igdbGame.Name
-	}
+	// Update title from IGDB
+	game.Title = igdbGame.Name
 
 	// Set cover URL
 	if igdbGame.Cover != nil {
@@ -321,6 +448,17 @@ func enrichGameFromIGDB(game *model.Game, igdbGame *legacy_domain.Game) {
 	if igdbGame.FirstReleaseDate != nil {
 		releaseDate := time.Unix(*igdbGame.FirstReleaseDate, 0)
 		game.ReleaseDate = &releaseDate
+	}
+
+	// Extract Steam URL from websites
+	if len(igdbGame.Websites) > 0 {
+		for _, website := range igdbGame.Websites {
+			if website.Type == legacy_domain.WebsiteCategorySteam {
+				game.SteamURL = website.URL
+			} else if website.Type == legacy_domain.WebsiteCategoryOfficial {
+				game.OfficialURL = website.URL
+			}
+		}
 	}
 }
 

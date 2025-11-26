@@ -87,8 +87,12 @@
         <PlayingView v-else-if="currentView === 'playing'" />
         <HistoryView v-else-if="currentView === 'history'" />
         <CalendarView v-else-if="currentView === 'calendar'" />
+        <AllView v-else-if="currentView === 'all'" />
       </main>
     </div>
+
+    <!-- Toast Notifications -->
+    <Toast ref="toastRef" />
   </div>
 </template>
 
@@ -96,20 +100,34 @@
 import { ref, onMounted } from 'vue'
 import { GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth'
 import { auth } from './lib/firebase'
+import Toast from './components/Toast.vue'
 import GameSearch from './components/GameSearch.vue'
 import BacklogView from './views/BacklogView.vue'
 import PlayingView from './views/PlayingView.vue'
 import HistoryView from './views/HistoryView.vue'
 import CalendarView from './views/CalendarView.vue'
+import AllView from './views/AllView.vue'
 
 const user = ref(null)
 const currentView = ref('backlog')
+const toastRef = ref(null)
+
+// Make toast available globally
+if (typeof window !== 'undefined') {
+  window.$toast = {
+    success: (message, duration) => toastRef.value?.addToast(message, 'success', duration),
+    error: (message, duration) => toastRef.value?.addToast(message, 'error', duration),
+    warning: (message, duration) => toastRef.value?.addToast(message, 'warning', duration),
+    info: (message, duration) => toastRef.value?.addToast(message, 'info', duration)
+  }
+}
 
 const views = [
   { id: 'backlog', name: 'Backlog' },
   { id: 'playing', name: 'Playing' },
   { id: 'history', name: 'History' },
-  { id: 'calendar', name: 'Calendar' }
+  { id: 'calendar', name: 'Calendar' },
+  { id: 'all', name: 'All' }
 ]
 
 onMounted(() => {

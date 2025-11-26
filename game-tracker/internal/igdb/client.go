@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -54,6 +55,7 @@ func (c *Client) refreshToken() error {
 	params := fmt.Sprintf("?client_id=%s&client_secret=%s&grant_type=client_credentials",
 		c.clientID, c.clientSecret)
 
+	log.Println("[IGDB] Refreshing access token...")
 	resp, err := c.httpClient.Post(authURL+params, "application/json", nil)
 	if err != nil {
 		return fmt.Errorf("failed to refresh token: %w", err)
@@ -62,6 +64,7 @@ func (c *Client) refreshToken() error {
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
+		log.Printf("[IGDB] Token refresh failed with status %d: %s", resp.StatusCode, string(body))
 		return fmt.Errorf("failed to refresh token [%d]: %s", resp.StatusCode, string(body))
 	}
 
@@ -73,6 +76,7 @@ func (c *Client) refreshToken() error {
 	c.accessToken = tokenResp.AccessToken
 	c.accessTokenExpires = time.Now().Unix() + int64(tokenResp.ExpiresIn)
 
+	log.Printf("[IGDB] Token refreshed successfully (expires in %d seconds)", tokenResp.ExpiresIn)
 	return nil
 }
 
@@ -112,6 +116,7 @@ func (c *Client) request(endpoint, query string) (*http.Response, error) {
 		if resp.StatusCode == http.StatusTooManyRequests {
 			resp.Body.Close()
 			tryCount = 0
+			log.Printf("[IGDB] Rate limited, retrying after 250ms...")
 			time.Sleep(250 * time.Millisecond)
 			continue
 		}
@@ -120,9 +125,11 @@ func (c *Client) request(endpoint, query string) (*http.Response, error) {
 		if tryCount > retries {
 			body, _ := io.ReadAll(resp.Body)
 			resp.Body.Close()
+			log.Printf("[IGDB] Request failed after %d retries [%d]: %s", retries, resp.StatusCode, string(body))
 			return nil, fmt.Errorf("failed to make request [%d]: %s", resp.StatusCode, string(body))
 		}
 		resp.Body.Close()
+		log.Printf("[IGDB] Request failed with status %d, retry %d/%d", resp.StatusCode, tryCount, retries)
 	}
 
 	return resp, nil
@@ -145,10 +152,12 @@ func (c *Client) Request(endpoint, query string) ([]byte, error) {
 
 // Search performs a search query on IGDB and returns minimal candidate results
 func (c *Client) Search(query string) ([]SearchCandidate, error) {
+	log.Printf("[IGDB] Searching for: %q", query)
 	searchQuery := fmt.Sprintf(`fields game.name,game.cover.*,game.first_release_date; search "%s"; where game != null & game.game_type.type != (13) & game.version_parent = null; limit 10;`, query)
 
 	body, err := c.Request("search", searchQuery)
 	if err != nil {
+		log.Printf("[IGDB] Search failed for %q: %v", query, err)
 		return nil, fmt.Errorf("failed to search games: %w", err)
 	}
 
@@ -180,15 +189,18 @@ func (c *Client) Search(query string) ([]SearchCandidate, error) {
 		candidates = append(candidates, candidate)
 	}
 
+	log.Printf("[IGDB] Search for %q returned %d results", query, len(candidates))
 	return candidates, nil
 }
 
 // GetGameByID fetches full game details by IGDB ID
 func (c *Client) GetGameByID(id int) (*legacy_domain.Game, error) {
+	log.Printf("[IGDB] Fetching game details for ID: %d", id)
 	query := fmt.Sprintf(`fields name,url,aggregated_rating,category,first_release_date,platforms.*,cover.*,genres.*,websites.*,game_type.*,release_dates.*,release_dates.status.*,release_dates.platform.*,parent_game.id,parent_game.name,url,updated_at; where id = %d;`, id)
 
 	body, err := c.Request("games", query)
 	if err != nil {
+		log.Printf("[IGDB] Failed to fetch game ID %d: %v", id, err)
 		return nil, fmt.Errorf("failed to fetch game: %w", err)
 	}
 
@@ -198,8 +210,11 @@ func (c *Client) GetGameByID(id int) (*legacy_domain.Game, error) {
 	}
 
 	if len(games) == 0 {
+		log.Printf("[IGDB] Game ID %d not found", id)
 		return nil, fmt.Errorf("game with ID %d not found", id)
 	}
+
+	log.Printf("[IGDB] Successfully fetched game: %s (ID: %d)", games[0].Name, id)
 
 	return games[0], nil
 }

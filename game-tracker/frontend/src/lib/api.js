@@ -30,16 +30,24 @@ export const api = {
       headers,
       body: JSON.stringify(gameData)
     })
-    if (!response.ok) throw new Error('Failed to create game')
+    if (!response.ok) {
+      // Try to extract error message from response
+      const errorText = await response.text()
+      throw new Error(errorText || 'Failed to create game')
+    }
     return response.json()
   },
 
-  async updateGameStatus(gameId, status) {
+  async updateGameStatus(gameId, status, datePlayed = null) {
     const headers = await getAuthHeaders()
+    const body = { status }
+    if (datePlayed) {
+      body.date_played = datePlayed
+    }
     const response = await fetch(`${API_URL}/api/v1/games/${gameId}/status`, {
       method: 'POST',
       headers,
-      body: JSON.stringify({ status })
+      body: JSON.stringify(body)
     })
     if (!response.ok) throw new Error('Failed to update game status')
     return response.json()
@@ -51,6 +59,29 @@ export const api = {
       headers
     })
     if (!response.ok) throw new Error('Failed to search games')
+    return response.json()
+  },
+
+  async deleteGame(gameId) {
+    const headers = await getAuthHeaders()
+    const response = await fetch(`${API_URL}/api/v1/games/${gameId}`, {
+      method: 'DELETE',
+      headers
+    })
+    if (!response.ok) throw new Error('Failed to delete game')
+  },
+
+  async updateGameMatch(gameId, igdbId) {
+    const headers = await getAuthHeaders()
+    const response = await fetch(`${API_URL}/api/v1/games/${gameId}/match`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ igdb_id: igdbId })
+    })
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(errorText || 'Failed to update game match')
+    }
     return response.json()
   }
 }

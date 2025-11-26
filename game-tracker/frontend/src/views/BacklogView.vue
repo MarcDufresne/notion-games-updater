@@ -68,41 +68,61 @@
       <!-- Break Section -->
       <div v-if="breakGames.length > 0" class="mb-8">
         <h2 class="text-2xl font-semibold mb-4 text-gray-200">Break</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <TransitionGroup name="game-list" tag="div" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <GameCard
             v-for="game in breakGames"
             :key="game.id"
             :game="game"
             @update-status="handleStatusUpdate"
+            @card-click="openModal"
           />
-        </div>
+        </TransitionGroup>
       </div>
 
       <!-- Up Next Section -->
       <div>
         <h2 class="text-2xl font-semibold mb-4 text-gray-200">Up Next</h2>
-        <div v-if="upNextGames.length > 0" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <TransitionGroup v-if="upNextGames.length > 0" name="game-list" tag="div" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           <GameCard
             v-for="game in upNextGames"
             :key="game.id"
             :game="game"
             @update-status="handleStatusUpdate"
+            @card-click="openModal"
           />
-        </div>
+        </TransitionGroup>
         <div v-else class="text-gray-400 text-center py-8 bg-gray-800/50 rounded-lg border border-gray-700">
           No games in your backlog. Use the search above to add games!
         </div>
       </div>
     </div>
+
+    <!-- Game Details Modal -->
+    <GameDetailsModal
+      :is-open="isModalOpen"
+      :game="selectedGame"
+      @close="closeModal"
+      @update-status="handleStatusUpdate"
+      @delete-game="handleDeleteGame"
+    />
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useGamesStore } from '../stores/games'
 import GameCard from '../components/GameCard.vue'
+import GameDetailsModal from '../components/GameDetailsModal.vue'
 
 const gamesStore = useGamesStore()
+const isModalOpen = ref(false)
+const selectedGameId = ref(null)
+
+// Computed to always get fresh game data from store
+const selectedGame = computed(() => {
+  if (!selectedGameId.value) return {}
+  return gamesStore.backlog.find(g => g.id === selectedGameId.value) || {}
+})
 
 const breakGames = computed(() => {
   const games = gamesStore.backlog.filter(g => g.status === 'Break')
@@ -127,11 +147,46 @@ onMounted(() => {
   gamesStore.fetchGames('backlog')
 })
 
-async function handleStatusUpdate(gameId, newStatus) {
-  await gamesStore.updateStatus(gameId, newStatus)
+function openModal(game) {
+  selectedGameId.value = game.id
+  isModalOpen.value = true
+}
+
+function closeModal() {
+  isModalOpen.value = false
+  selectedGameId.value = null
+}
+
+async function handleStatusUpdate(gameId, newStatus, datePlayed = null) {
+  await gamesStore.updateStatus(gameId, newStatus, datePlayed)
+}
+
+async function handleDeleteGame(gameId) {
+  await gamesStore.deleteGame(gameId)
+  closeModal()
 }
 </script>
 
 <style scoped>
-/* Add any component-specific styles here */
+/* Smooth transitions for game cards */
+.game-list-move,
+.game-list-enter-active,
+.game-list-leave-active {
+  transition: all 0.5s ease;
+}
+
+.game-list-enter-from {
+  opacity: 0;
+  transform: translateY(-30px);
+}
+
+.game-list-leave-to {
+  opacity: 0;
+  transform: translateY(30px);
+}
+
+/* Ensure leaving items are positioned absolutely to allow smooth movement */
+.game-list-leave-active {
+  position: absolute;
+}
 </style>
