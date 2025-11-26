@@ -107,3 +107,5 @@ dmypy.json
 cython_debug/
 .idea/
 *.iml
+/server
+/migrate
