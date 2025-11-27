@@ -169,9 +169,17 @@ export const useGamesStore = defineStore('games', () => {
     try {
       const updatedGame = await api.updateGameMatch(gameId, igdbId)
 
-      ;[backlog, playing, history, calendar, all].forEach(list => {
-        updateGameInList(gameId, updatedGame, list.value)
-      })
+      // Remove the game from all lists and re-add it to properly sort it
+      // based on its updated metadata (like release date)
+      removeGameFromAllLists(gameId, lists)
+
+      // Re-add to appropriate status lists with proper sorting
+      addGameToStatusList(updatedGame, lists)
+
+      // Update in the 'all' list - remove old entry and add with proper sorting
+      all.value = all.value.filter(g => g.id !== gameId)
+      all.value.push(updatedGame)
+      sortByReleaseDate(all.value, true)
 
       console.log('Game match updated successfully')
       return updatedGame
