@@ -66,7 +66,9 @@ func main() {
 	searchCache := cache.NewCache(500, 1*time.Hour)
 	log.Println("Search cache initialized")
 
-	go worker.StartBackgroundSync(ctx, db, igdbClient)
+	if !cfg.Server.NoSync {
+		go worker.StartBackgroundSync(ctx, db, igdbClient)
+	}
 
 	handler := api.NewHandler(db, igdbClient, searchCache, authClient)
 

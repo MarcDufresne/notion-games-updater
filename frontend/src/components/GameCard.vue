@@ -86,16 +86,26 @@
           <span v-else class="font-semibold text-gray-500">N/A</span>
         </div>
 
-        <div v-if="game.release_date" :class="['text-sm mb-2', isReleased ? 'text-gray-300' : 'text-gray-500']">
-          <span v-if="isReleased">Released: </span>
-          <span v-else>Releases: </span>
-          {{ formatReleaseDate(game.release_date) }}
+        <div v-if="game.release_date" :class="['text-sm mb-2 flex items-center gap-1', isReleased ? 'text-gray-300' : 'text-gray-500']">
+          <!-- Calendar icon for released games -->
+          <svg v-if="isReleased" class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clip-rule="evenodd" />
+          </svg>
+          <!-- Clock icon for upcoming releases -->
+          <svg v-else class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" />
+          </svg>
+          <span>{{ formatReleaseDate(game.release_date) }}</span>
         </div>
         <div v-else class="text-sm text-gray-400 mb-2" style="height: 1.25rem;"></div>
 
         <!-- Show played date for completed games, with placeholder for consistent height -->
-        <div v-if="isCompletedGame && game.date_played && !isDatePlayedSentinel(game.date_played)" class="text-sm text-green-400 mb-2">
-          Played: {{ formatDatePlayed(game.date_played) }}
+        <div v-if="isCompletedGame && game.date_played && !isDatePlayedSentinel(game.date_played)" class="text-sm text-green-400 mb-2 flex items-center gap-1">
+          <!-- Checkmark icon -->
+          <svg class="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+          </svg>
+          <span>{{ formatDatePlayed(game.date_played) }}</span>
         </div>
         <div v-else class="text-sm mb-2" style="height: 1.25rem;"></div>
 

@@ -18,8 +18,9 @@ type Config struct {
 		ClientSecret string
 	}
 	Server struct {
-		Port string
-		Host string
+		Port   string
+		Host   string
+		NoSync bool
 	}
 }
 
@@ -54,6 +55,11 @@ func Load() (*Config, error) {
 	cfg.Server.Host = os.Getenv("HOST")
 	if cfg.Server.Host == "" {
 		cfg.Server.Host = "0.0.0.0"
+	}
+
+	noSync := os.Getenv("NO_SYNC")
+	if noSync == "1" || noSync == "true" {
+		cfg.Server.NoSync = true
 	}
 
 	return cfg, nil

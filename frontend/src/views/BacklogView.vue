@@ -68,7 +68,7 @@
       <!-- Break Section -->
       <div v-if="breakGames.length > 0" class="mb-8">
         <h2 class="text-2xl font-semibold mb-4 text-gray-200">Break</h2>
-        <TransitionGroup name="game-list" tag="div" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <TransitionGroup name="game-list" tag="div" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
           <GameCard
             v-for="game in breakGames"
             :key="game.id"
@@ -82,7 +82,7 @@
       <!-- Up Next Section -->
       <div>
         <h2 class="text-2xl font-semibold mb-4 text-gray-200">Up Next</h2>
-        <TransitionGroup v-if="upNextGames.length > 0" name="game-list" tag="div" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <TransitionGroup v-if="upNextGames.length > 0" name="game-list" tag="div" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
           <GameCard
             v-for="game in upNextGames"
             :key="game.id"
