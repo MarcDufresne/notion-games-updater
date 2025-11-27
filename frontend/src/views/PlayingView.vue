@@ -6,7 +6,7 @@
       v-if="gamesStore.playing.length > 0"
       name="game-list"
       tag="div"
-      class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"
+      class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4"
     >
       <GameCard
         v-for="game in gamesStore.playing"

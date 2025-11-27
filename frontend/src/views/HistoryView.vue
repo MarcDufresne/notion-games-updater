@@ -7,7 +7,7 @@
         <h2 class="text-2xl font-semibold mb-4 border-b-2 border-gray-700 pb-2 text-gray-200">
           {{ group.year || 'No Date' }}
         </h2>
-        <TransitionGroup name="game-list" tag="div" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <TransitionGroup name="game-list" tag="div" class="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
           <GameCard
             v-for="game in group.games"
             :key="game.id"
