@@ -107,9 +107,15 @@
                   <!-- Rating -->
                   <div v-if="game.rating">
                     <h3 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-2">Rating</h3>
-                    <div class="flex items-center gap-2">
-                      <div class="text-2xl font-bold text-blue-400">{{ game.rating }}</div>
-                      <div class="text-gray-500">/100</div>
+                    <div
+                      :class="[
+                        'inline-flex items-center justify-center w-14 h-14 rounded font-bold text-2xl border-2',
+                        getRatingColor(game.rating).bg,
+                        getRatingColor(game.rating).text,
+                        getRatingColor(game.rating).border
+                      ]"
+                    >
+                      {{ game.rating }}
                     </div>
                   </div>
 
@@ -362,6 +368,7 @@
 import { computed, watch, onUnmounted, ref, nextTick } from 'vue'
 import { getPlatformColor, sortPlatforms } from '../lib/platformColors'
 import { formatReleaseDate, formatDatePlayed, isDatePlayedSentinel } from '../lib/dateUtils'
+import { getRatingColor } from '../lib/ratingColors'
 import StatusPicker from './StatusPicker.vue'
 import FixMatchModal from './FixMatchModal.vue'
 

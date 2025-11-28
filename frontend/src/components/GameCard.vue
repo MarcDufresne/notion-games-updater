@@ -80,11 +80,6 @@
         </div>
         <div v-else class="mb-2" style="height: 1.75rem;"></div>
 
-        <div class="mb-2 relative">
-          <span class="text-sm font-medium text-gray-400">Rating: </span>
-          <span v-if="game.rating" class="font-semibold text-blue-400">{{ game.rating }}</span>
-          <span v-else class="font-semibold text-gray-500">N/A</span>
-        </div>
 
         <div v-if="game.release_date" :class="['text-sm mb-2 flex items-center gap-1', isReleased ? 'text-gray-300' : 'text-gray-500']">
           <!-- Calendar icon for released games -->
