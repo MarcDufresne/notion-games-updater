@@ -33,21 +33,39 @@
       <div
         v-for="result in searchResults"
         :key="result.id"
-        class="flex items-center p-2 sm:p-3 hover:bg-gray-700 cursor-pointer border-b border-gray-700 transition-colors"
-        @click="selectGame(result)"
+        class="flex items-center p-2 sm:p-3 border-b border-gray-700 transition-colors hover:bg-gray-700 group"
       >
-        <img
-          v-if="result.cover_url"
-          :src="result.cover_url"
-          :alt="result.name"
-          class="w-10 h-14 sm:w-12 sm:h-16 object-cover rounded mr-2 sm:mr-3 shadow-md flex-shrink-0"
-        />
-        <div class="flex-1 min-w-0">
-          <div class="font-semibold text-white text-sm sm:text-base truncate">{{ result.name }}</div>
-          <div v-if="result.release_year" class="text-xs sm:text-sm text-gray-400">
-            {{ result.release_year }}
+        <div
+          class="flex items-center flex-1 min-w-0 cursor-pointer"
+          @click="selectGame(result)"
+        >
+          <img
+            v-if="result.cover_url"
+            :src="result.cover_url"
+            :alt="result.name"
+            class="w-10 h-14 sm:w-12 sm:h-16 object-cover rounded mr-2 sm:mr-3 shadow-md flex-shrink-0"
+          />
+          <div class="flex-1 min-w-0">
+            <div class="font-semibold text-white text-sm sm:text-base truncate">{{ result.name }}</div>
+            <div class="text-xs sm:text-sm text-gray-400">
+              <span v-if="result.release_year">{{ result.release_year }}</span>
+              <span v-if="result.release_year && getLibraryGame(result)" class="text-gray-500"> • </span>
+              <span v-if="getLibraryGame(result)" class="text-gray-500">In Library</span>
+            </div>
           </div>
         </div>
+
+        <!-- Add & Open Button -->
+        <button
+          v-if="!getLibraryGame(result)"
+          @click.stop="addAndOpen(result)"
+          class="flex-shrink-0 ml-2 p-2 text-blue-400 border border-blue-400 hover:bg-blue-400 hover:text-white rounded transition-colors"
+          title="Add and open details"
+        >
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </button>
       </div>
 
       <!-- No Results Message -->
@@ -76,7 +94,7 @@
 </template>
 
 <script setup>
-import { ref, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useDebounceFn } from '@vueuse/core'
 import { useGamesStore } from '../stores/games'
 
@@ -87,7 +105,23 @@ const searchResults = ref([])
 const showDropdown = ref(false)
 const isSearching = ref(false)
 
-const emit = defineEmits(['game-created'])
+const emit = defineEmits(['game-created', 'open-existing-game'])
+
+// Create a Map of IGDB IDs to games for O(1) lookup, excluding igdb_id = 0
+const libraryGamesMap = computed(() => {
+  const map = new Map()
+  gamesStore.all.forEach(game => {
+    if (game.igdb_id && game.igdb_id !== 0) {
+      map.set(game.igdb_id, game)
+    }
+  })
+  return map
+})
+
+// Helper function to check if a search result exists in library
+function getLibraryGame(result) {
+  return libraryGamesMap.value.get(result.id) || null
+}
 
 // Debounced search function
 const debouncedSearch = useDebounceFn(async (query) => {
@@ -115,6 +149,17 @@ watch(searchText, (newValue) => {
 })
 
 async function selectGame(result) {
+  // Check if game already exists in library
+  const existingGame = getLibraryGame(result)
+
+  if (existingGame) {
+    // Game exists, open it instead of creating duplicate
+    clearSearch()
+    emit('open-existing-game', existingGame)
+    return
+  }
+
+  // Game doesn't exist, create it
   try {
     const game = await gamesStore.createGame({
       title: result.name,
@@ -126,6 +171,27 @@ async function selectGame(result) {
     searchResults.value = []
     showDropdown.value = false
     emit('game-created', game)
+  } catch (error) {
+    console.error('Failed to create game:', error)
+    // Show toast notification
+    if (window.$toast) {
+      window.$toast.error(error.message, 5000)
+    }
+    showDropdown.value = false
+  }
+}
+
+async function addAndOpen(result) {
+  // Create game and immediately open its modal
+  try {
+    const game = await gamesStore.createGame({
+      title: result.name,
+      igdb_id: result.id,
+      status: 'Backlog'
+    })
+
+    clearSearch()
+    emit('open-existing-game', game)
   } catch (error) {
     console.error('Failed to create game:', error)
     // Show toast notification

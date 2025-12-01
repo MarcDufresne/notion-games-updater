@@ -44,7 +44,7 @@
 
             <!-- Center: Search Bar -->
             <div class="flex-1 max-w-2xl">
-              <GameSearch @game-created="handleGameCreated" />
+              <GameSearch @game-created="handleGameCreated" @open-existing-game="handleOpenExistingGame" />
             </div>
 
             <!-- Right: User Info -->
@@ -80,7 +80,7 @@
 
             <!-- Bottom Row: Full-width Search Bar -->
             <div class="w-full">
-              <GameSearch @game-created="handleGameCreated" />
+              <GameSearch @game-created="handleGameCreated" @open-existing-game="handleOpenExistingGame" />
             </div>
           </div>
         </div>
@@ -119,6 +119,16 @@
 
     <!-- Toast Notifications -->
     <Toast ref="toastRef" />
+
+    <!-- Game Details Modal -->
+    <GameDetailsModal
+      :is-open="isModalOpen"
+      :game="selectedGame"
+      @close="closeModal"
+      @update-status="handleStatusUpdate"
+      @delete-game="handleDeleteGame"
+      @match-updated="handleMatchUpdated"
+    />
   </div>
 </template>
 
@@ -128,15 +138,24 @@ import { GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuth
 import { auth } from './lib/firebase'
 import Toast from './components/Toast.vue'
 import GameSearch from './components/GameSearch.vue'
+import GameDetailsModal from './components/GameDetailsModal.vue'
 import BacklogView from './views/BacklogView.vue'
 import PlayingView from './views/PlayingView.vue'
 import HistoryView from './views/HistoryView.vue'
 import CalendarView from './views/CalendarView.vue'
 import AllView from './views/AllView.vue'
+import { useGameModal } from './composables/useGameModal'
+import { useGamesStore } from './stores/games'
 
 const user = ref(null)
 const currentView = ref('backlog')
 const toastRef = ref(null)
+
+// Initialize game modal
+const { isModalOpen, selectedGame, openModal, closeModal, handleStatusUpdate, handleDeleteGame, handleMatchUpdated } = useGameModal()
+
+// Initialize games store
+const gamesStore = useGamesStore()
 
 // Make toast available globally
 if (typeof window !== 'undefined') {
@@ -159,6 +178,10 @@ const views = [
 onMounted(() => {
   onAuthStateChanged(auth, (firebaseUser) => {
     user.value = firebaseUser
+    if (firebaseUser) {
+      // Load all games for library checking
+      gamesStore.fetchGames('all')
+    }
   })
 })
 
@@ -183,5 +206,10 @@ async function signOut() {
 function handleGameCreated() {
   // Optionally show a success message or refresh views
   console.log('Game created successfully')
+}
+
+function handleOpenExistingGame(game) {
+  // Open the modal with the existing game
+  openModal(game)
 }
 </script>
