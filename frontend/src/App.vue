@@ -115,6 +115,9 @@
         <CalendarView v-else-if="currentView === 'calendar'" />
         <AllView v-else-if="currentView === 'all'" />
       </main>
+
+      <!-- Sticky Search Bar (appears on scroll up) -->
+      <StickySearchBar @game-created="handleGameCreated" @open-existing-game="handleOpenExistingGame" />
     </div>
 
     <!-- Toast Notifications -->
@@ -138,6 +141,7 @@ import { GoogleAuthProvider, signInWithPopup, signOut as firebaseSignOut, onAuth
 import { auth } from './lib/firebase'
 import Toast from './components/Toast.vue'
 import GameSearch from './components/GameSearch.vue'
+import StickySearchBar from './components/StickySearchBar.vue'
 import GameDetailsModal from './components/GameDetailsModal.vue'
 import BacklogView from './views/BacklogView.vue'
 import PlayingView from './views/PlayingView.vue'

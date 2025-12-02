@@ -171,7 +171,7 @@ const groupedGames = computed(() => {
     sortedGroups.unshift({
       monthYear: 'Recent Releases',
       sortKey: -1,
-      games: recentReleases.sort((a, b) => new Date(b.release_date) - new Date(a.release_date)), // Most recent first
+      games: recentReleases.sort((a, b) => new Date(a.release_date) - new Date(b.release_date)), // Oldest first
       isTBD: false
     })
   }

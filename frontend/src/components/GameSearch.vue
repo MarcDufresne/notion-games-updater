@@ -59,11 +59,11 @@
         <button
           v-if="!getLibraryGame(result)"
           @click.stop="addAndOpen(result)"
-          class="flex-shrink-0 ml-2 p-2 text-blue-400 border border-blue-400 hover:bg-blue-400 hover:text-white rounded transition-colors"
+          class="flex-shrink-0 ml-2 p-2 text-blue-400 hover:bg-blue-400 hover:text-white rounded transition-colors"
           title="Add and open details"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3m0 0v3m0-3h3m-3 0H9m12 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
           </svg>
         </button>
       </div>
