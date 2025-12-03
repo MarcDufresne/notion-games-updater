@@ -2,8 +2,6 @@ const CACHE_NAME = 'game-tracker-v1';
 const urlsToCache = [
   '/',
   '/index.html',
-  '/icon.svg',
-  '/icon.png'
 ];
 
 // Install event - cache essential files
